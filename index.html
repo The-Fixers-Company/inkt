@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Management - Your App Name</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .auth-section, .confirmation-section, .result-section {
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        .delete-btn {
+            background-color: #EA4335;
+        }
+        .google-btn {
+            background-color: white;
+            color: #444;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+        }
+        .google-btn img {
+            width: 18px;
+            margin-right: 10px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .hidden {
+            display: none;
+        }
+        .warning {
+            color: #EA4335;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Account Management</h1>
+        
+        <div id="authSection" class="auth-section">
+            <p>To manage your account, please sign in:</p>
+            
+            <div id="emailSection">
+                <h3>Sign in with Email</h3>
+                <input type="email" id="email" placeholder="Your email address">
+                <input type="password" id="password" placeholder="Your password">
+                <button id="emailSignInButton">Sign In</button>
+            </div>
+            
+            <div id="googleSection">
+                <h3>Or</h3>
+                <button id="googleSignInButton" class="google-btn">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
+                    Sign in with Google
+                </button>
+            </div>
+        </div>
+        
+        <div id="confirmationSection" class="confirmation-section hidden">
+            <h2>Account Deactivation</h2>
+            <p>This will deactivate your account but preserve all your data for future use.</p>
+            <p class="warning">You can reactivate your account by signing in again.</p>
+            <button id="deactivateButton" class="delete-btn">Deactivate My Account</button>
+            <button id="cancelButton">Cancel</button>
+        </div>
+        
+        <div id="resultSection" class="result-section hidden">
+            <h2 id="resultTitle"></h2>
+            <p id="resultMessage"></p>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration - replace with your own config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBsq4yKJz4KNhS_FOfMPbkOS8JVSrPv7iU",
+            authDomain: "inkt-8b525.firebaseapp.com",
+            projectId: "inkt-8b525",
+            storageBucket: "inkt-8b525.firebasestorage.app",
+            messagingSenderId: "355677699200",
+            appId: "1:355677699200:web:4c24fca22c728f00837a65"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        // Elements
+        const authSection = document.getElementById('authSection');
+        const confirmationSection = document.getElementById('confirmationSection');
+        const resultSection = document.getElementById('resultSection');
+        const resultTitle = document.getElementById('resultTitle');
+        const resultMessage = document.getElementById('resultMessage');
+        
+        // Email sign-in
+        document.getElementById('emailSignInButton').addEventListener('click', () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (email && password) {
+                auth.signInWithEmailAndPassword(email, password)
+                    .then(() => {
+                        showConfirmation();
+                    })
+                    .catch((error) => {
+                        showResult('Authentication Failed', `Error: ${error.message}`);
+                    });
+            } else {
+                showResult('Missing Information', 'Please enter both email and password.');
+            }
+        });
+        
+        // Google sign-in
+        document.getElementById('googleSignInButton').addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then(() => {
+                    showConfirmation();
+                })
+                .catch((error) => {
+                    showResult('Authentication Failed', `Error: ${error.message}`);
+                });
+        });
+        
+        // Deactivate account
+        document.getElementById('deactivateButton').addEventListener('click', () => {
+            const user = auth.currentUser;
+            
+            if (user) {
+                // Mark the user as deactivated in Firestore
+                db.collection('users').doc(user.uid).update({
+                    accountStatus: 'deactivated',
+                    deactivatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    email: user.email // Store email to prevent trial abuse
+                })
+                .then(() => {
+                    // Sign out the user
+                    return auth.signOut();
+                })
+                .then(() => {
+                    showResult('Account Deactivated', 'Your account has been deactivated. You can reactivate it by signing in again. Your data has been preserved.');
+                })
+                .catch((error) => {
+                    showResult('Deactivation Failed', `Error: ${error.message}`);
+                });
+            } else {
+                showResult('Not Signed In', 'Please sign in first to deactivate your account.');
+            }
+        });
+        
+        // Cancel button
+        document.getElementById('cancelButton').addEventListener('click', () => {
+            auth.signOut();
+            resetView();
+        });
+        
+        // Helper functions
+        function showConfirmation() {
+            authSection.classList.add('hidden');
+            confirmationSection.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+        }
+        
+        function showResult(title, message) {
+            authSection.classList.add('hidden');
+            confirmationSection.classList.add('hidden');
+            resultSection.classList.remove('hidden');
+            
+            resultTitle.textContent = title;
+            resultMessage.textContent = message;
+        }
+        
+        function resetView() {
+            authSection.classList.remove('hidden');
+            confirmationSection.classList.add('hidden');
+            resultSection.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
